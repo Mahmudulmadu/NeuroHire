@@ -1,0 +1,81 @@
+# ==========================================
+# Python Byte-compiled / Optimized Files
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ==========================================
+# Virtual Environments (Local Packages)
+# ==========================================
+.venv/
+venv/
+ENV/
+env/
+Active.react
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ==========================================
+# Environment Variables & Secrets (CRITICAL)
+# ==========================================
+.env
+.env.[a-zA-Z]*
+!.env.example
+.flaskenv
+
+# ==========================================
+# Dependency Managers & Locks (Optional)
+# ==========================================
+# Keep lock files if you want deterministic builds across your team.
+# Uncomment if you want to explicitly ignore them:
+# Poetry.lock
+# Pipfile.lock
+
+# ==========================================
+# Testing & Code Coverage
+# ==========================================
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+
+# ==========================================
+# Databases & Storage (SQLite / Local Uploads)
+# ==========================================
+*.db
+*.sqlite3
+# Ignore local file uploads or static storage if they live in your app
+# app/static/uploads/
+
+# ==========================================
+# IDEs and Editors
+# ==========================================
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# PyCharm / JetBrains
+.idea/
+
+# General text editors
+*.swp
+*~
+.DS_Store
+
+# ==========================================
+# Logs
+# ==========================================
+*.log
+logs/
