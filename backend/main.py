@@ -15,7 +15,7 @@ from backend.core.config import (
 
 )
 
-from backend.api.routes import router
+#from backend.api.routes import router
 
 logger = logging.getLogger('ats_resume_analyzer')
 

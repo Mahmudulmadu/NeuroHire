@@ -30,7 +30,7 @@ SUPPORTED_MIME_TYPES = {
     'application/msword': 'doc',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
 }
-SPACY_MODEL = "en_core_web_md"
+SPACY_MODEL_PRIMARY = "en_core_web_md"
 SPACY_MODEL_SECONDARY = "en_core_web_sm"
 SENTENCE_TRANSFORMER_MODEL = os.getenv("SENTENCE_TRANSFORMER_MODEL", "all-MiniLM-L6-v2")
 
