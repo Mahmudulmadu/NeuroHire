@@ -9,40 +9,46 @@ from backend.core.config import (
     APP_DESCRIPTION,
     APP_VERSION,
     ALLOWED_ORIGINS,
+    ALLOWED_ORIGIN_REGEX,
     SPACY_MODEL_PRIMARY,
     SPACY_MODEL_SECONDARY,
     SENTENCE_TRANSFORMER_MODEL,
 
 )
 
-#from backend.api.routes import router
+from backend.api.routes import router
 
 logger = logging.getLogger('ats_resume_analyzer')
 
 @asynccontextmanager
 async def lifespan(app:FastAPI):
-   logger.info("Starting up ATS Resume Analyzer API...")
+    logger.info("Starting up ATS Resume Analyzer API...")
 
-   logger.info(f"Loading spaCy models: {SPACY_MODEL_PRIMARY} ...")
-   import spacy
-   try:
-      app.state.nlp = spacy.load(SPACY_MODEL_PRIMARY)
-      logger.info(f"Successfully loaded spaCy model: {SPACY_MODEL_PRIMARY}")
-   except OSError:
-        logger.warning(f"Failed to load spaCy model: {SPACY_MODEL_PRIMARY}. Attempting to load secondary model: {SPACY_MODEL_SECONDARY}...")
+    logger.info(f"Loading spaCy models: {SPACY_MODEL_PRIMARY} ...")
+    import spacy
+
+    try:
+        app.state.nlp = spacy.load(SPACY_MODEL_PRIMARY)
+        logger.info(f"Successfully loaded spaCy model: {SPACY_MODEL_PRIMARY}")
+    except OSError:
+        logger.warning(
+            f"Failed to load spaCy model: {SPACY_MODEL_PRIMARY}. Attempting to load secondary model: {SPACY_MODEL_SECONDARY}..."
+        )
         app.state.nlp = spacy.load(SPACY_MODEL_SECONDARY)
         logger.info(f"Successfully loaded spaCy model: {SPACY_MODEL_SECONDARY}")
 
-   logger.info(f"Loading sentence transformer model: {SENTENCE_TRANSFORMER_MODEL} ...")
-   from sentence_transformers import SentenceTransformer
-   app.state.st_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
-   logger.info(f"Successfully loaded sentence transformer model: {SENTENCE_TRANSFORMER_MODEL}")
-   
-   logger.info("ATS Resume Analyzer API startup complete.")
+    logger.info(f"Loading sentence transformer model: {SENTENCE_TRANSFORMER_MODEL} ...")
+    from sentence_transformers import SentenceTransformer
 
-   yield
+    app.state.st_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
+    app.state.embedder = app.state.st_model
+    logger.info(f"Successfully loaded sentence transformer model: {SENTENCE_TRANSFORMER_MODEL}")
 
-   logger.info("Shutting down ATS Resume Analyzer API...")
+    logger.info("ATS Resume Analyzer API startup complete.")
+
+    yield
+
+    logger.info("Shutting down ATS Resume Analyzer API...")
 
 app = FastAPI(
     title=API_TITLE,
@@ -57,10 +63,13 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
 )
+
+app.include_router(router)
 
 @app.get('/')
 async def root():

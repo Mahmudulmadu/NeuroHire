@@ -1,0 +1,81 @@
+:root {
+  --bg: #f6f0e8;
+  --bg-accent: #eadcc9;
+  --panel: rgba(255, 252, 247, 0.8);
+  --panel-strong: #fffaf3;
+  --ink: #182126;
+  --muted: #5b6462;
+  --line: rgba(24, 33, 38, 0.12);
+  --teal: #0f766e;
+  --teal-soft: rgba(15, 118, 110, 0.12);
+  --coral: #d97757;
+  --coral-soft: rgba(217, 119, 87, 0.14);
+  --gold: #caa15a;
+  --shadow: 0 24px 70px rgba(60, 43, 20, 0.14);
+  font-family: Aptos, 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.1), transparent 32%),
+    linear-gradient(180deg, #f8f2eb 0%, #efe3d4 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  :root {
+    --bg: #f6f0e8;
+    --bg-accent: #eadcc9;
+    --panel: rgba(255, 252, 247, 0.8);
+    --panel-strong: #fffaf3;
+    --ink: #182126;
+    --muted: #5b6462;
+    --line: rgba(24, 33, 38, 0.12);
+    --teal: #0f766e;
+    --teal-soft: rgba(15, 118, 110, 0.12);
+    --coral: #d97757;
+    --coral-soft: rgba(217, 119, 87, 0.14);
+    --gold: #caa15a;
+    --shadow: 0 24px 70px rgba(60, 43, 20, 0.14);
+    font-family: Aptos, 'Segoe UI Variable', 'Segoe UI', sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at top left, rgba(15, 118, 110, 0.1), transparent 32%),
+      linear-gradient(180deg, #f8f2eb 0%, #efe3d4 100%);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+  }
+
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  #root {
+    min-height: 100vh;
+  }

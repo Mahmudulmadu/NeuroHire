@@ -4,7 +4,8 @@ from pathlib import Path
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()
+    ENV_PATH = Path(__file__).resolve().parents[1] / '.env'
+    load_dotenv(dotenv_path=ENV_PATH)
     
 except ImportError:
     pass
@@ -19,6 +20,7 @@ ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+ALLOWED_ORIGIN_REGEX = r"https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 
 # file
 MAX_FILE_SIZE_MB= 5  # 5 MB
@@ -32,7 +34,15 @@ SUPPORTED_MIME_TYPES = {
 }
 SPACY_MODEL_PRIMARY = "en_core_web_md"
 SPACY_MODEL_SECONDARY = "en_core_web_sm"
-SENTENCE_TRANSFORMER_MODEL = os.getenv("SENTENCE_TRANSFORMER_MODEL", "all-MiniLM-L6-v2")
+FINE_TUNED_MODEL_PATH = Path(__file__).resolve().parents[1] / 'ML_Model_fine_tune_BERT'
+DEFAULT_SENTENCE_TRANSFORMER_MODEL = (
+    str(FINE_TUNED_MODEL_PATH)
+    if FINE_TUNED_MODEL_PATH.exists()
+    else 'all-MiniLM-L6-v2'
+)
+SENTENCE_TRANSFORMER_MODEL = os.getenv("SENTENCE_TRANSFORMER_MODEL", DEFAULT_SENTENCE_TRANSFORMER_MODEL)
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
 # score component weights - this is business logic and can be adjusted as needed
 SCORE_WEIGHTS = {

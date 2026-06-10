@@ -1,0 +1,28 @@
+{
+  "selected_backbone": "sentence-transformers/all-mpnet-base-v2",
+  "max_seq_length": 320,
+  "train_batch_size": 8,
+  "encode_batch_size": 32,
+  "epochs": 4,
+  "train_rows": 5099,
+  "val_rows": 637,
+  "test_rows": 638,
+  "base_test_metrics": {
+    "mae": 0.2194356605095923,
+    "rmse": 0.2616848673901334,
+    "pearson": 0.20012292658318256,
+    "spearman": 0.18581415200835033
+  },
+  "finetuned_val_metrics": {
+    "mae": 0.11772828007361484,
+    "rmse": 0.15616891447692324,
+    "pearson": 0.8000147715948612,
+    "spearman": 0.7307257046399666
+  },
+  "finetuned_test_metrics": {
+    "mae": 0.1202006685939235,
+    "rmse": 0.15882309840809575,
+    "pearson": 0.796176995998976,
+    "spearman": 0.7316513397140477
+  }
+}
