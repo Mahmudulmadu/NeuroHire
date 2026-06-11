@@ -43,6 +43,7 @@ DEFAULT_SENTENCE_TRANSFORMER_MODEL = (
 SENTENCE_TRANSFORMER_MODEL = os.getenv("SENTENCE_TRANSFORMER_MODEL", DEFAULT_SENTENCE_TRANSFORMER_MODEL)
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 
 # score component weights - this is business logic and can be adjusted as needed
 SCORE_WEIGHTS = {

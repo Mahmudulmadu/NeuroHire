@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import './App.css'
+import { useAuth } from './AuthContext.tsx'
+import { AuthPage } from './AuthPage.tsx'
 import {
   analyzeResume,
   deleteHistoryEntry,
@@ -8,7 +10,6 @@ import {
   fetchHistory,
   generateHistoryPdf,
   generatePdf,
-  getApiBaseUrl,
 } from './api.ts'
 import { BarChart } from './components/BarChart.tsx'
 import { ScoreRing } from './components/ScoreRing.tsx'
@@ -35,30 +36,25 @@ const componentLabels: Record<ScoreKey, string> = {
   keywords: 'Keywords',
   content: 'Content',
   skill_validation: 'Skill Validation',
-  ats_compatibility: 'ATS Compatibility',
+  ats_compatibility: 'ATS Compat.',
 }
 
 function formatDate(value: string): string {
-  if (!value) {
-    return 'No timestamp'
-  }
-
-  return new Intl.DateTimeFormat('en', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
+  if (!value) return '—'
+  return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = filename
-  anchor.click()
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
   URL.revokeObjectURL(url)
 }
 
 function App() {
+  const { user, loading: authLoading, signOut, isConfigured } = useAuth()
   const [resumeFile, setResumeFile] = useState<File | null>(null)
   const [jobDescription, setJobDescription] = useState('')
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null)
@@ -66,11 +62,13 @@ function App() {
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [health, setHealth] = useState<HealthResponse | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analysisProgress, setAnalysisProgress] = useState(0)
   const [isHistoryLoading, setIsHistoryLoading] = useState(true)
-  const [statusMessage, setStatusMessage] = useState('Backend ready for analysis.')
+  const [statusMessage, setStatusMessage] = useState('Ready.')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const activeAnalysis = selectedAnalysis ?? analysis
+
   const componentChartData = activeAnalysis
     ? (Object.keys(componentMaxima) as ScoreKey[]).map((key) => ({
         label: componentLabels[key],
@@ -79,208 +77,245 @@ function App() {
       }))
     : []
 
-  const historyScores = useMemo(() => history.map((entry) => entry.ats_score), [history])
+  const historyScores = useMemo(() => history.map((e) => e.ats_score), [history])
   const skillValidationPct = activeAnalysis?.skill_validation_details?.validation_pct ?? 0
   const keywordMatch = activeAnalysis?.jd_match_analysis?.match_percentage ?? activeAnalysis?.keyword_match ?? 0
   const semanticMatch = (activeAnalysis?.jd_match_analysis?.semantic_similarity ?? 0) * 100
 
   useEffect(() => {
-    async function loadDashboard() {
+    async function load() {
       try {
-        const [healthData, historyData] = await Promise.all([fetchHealth(), fetchHistory()])
-        setHealth(healthData)
-        setHistory(historyData)
-        setStatusMessage('Connected to the NeuroHire analysis API.')
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unable to reach backend'
-        setErrorMessage(message)
-        setStatusMessage('Waiting for backend connection.')
+        const [h, hist] = await Promise.all([fetchHealth(), fetchHistory()])
+        setHealth(h)
+        setHistory(hist)
+        setStatusMessage('Connected.')
+      } catch (err) {
+        setErrorMessage(err instanceof Error ? err.message : 'Cannot reach backend')
+        setStatusMessage('Disconnected.')
       } finally {
         setIsHistoryLoading(false)
       }
     }
-
-    void loadDashboard()
+    void load()
   }, [])
 
   async function reloadHistory() {
     try {
-      const entries = await fetchHistory()
-      setHistory(entries)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to refresh history'
-      setErrorMessage(message)
+      setHistory(await fetchHistory())
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'History refresh failed')
     }
   }
 
   async function handleAnalyze(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-
     if (!resumeFile) {
-      setErrorMessage('Select a resume file before running the analysis.')
+      setErrorMessage('Select a resume file first.')
       return
     }
-
     setIsAnalyzing(true)
+    setAnalysisProgress(0)
     setErrorMessage(null)
     setStatusMessage(`Analyzing ${resumeFile.name}...`)
 
+    // Simulated progress: ramp up to 90% while waiting for the API
+    const steps = [8, 18, 30, 45, 58, 68, 78, 85, 90]
+    let stepIdx = 0
+    const timer = setInterval(() => {
+      if (stepIdx < steps.length) {
+        setAnalysisProgress(steps[stepIdx])
+        stepIdx++
+      }
+    }, 800)
+
     try {
       const result = await analyzeResume(resumeFile, jobDescription)
+      clearInterval(timer)
+      setAnalysisProgress(100)
       setAnalysis(result)
       setSelectedAnalysis(result)
-      setStatusMessage('Analysis completed. Visuals and recommendations are updated.')
+      setStatusMessage('Analysis complete.')
       await reloadHistory()
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Analysis failed'
-      setErrorMessage(message)
-      setStatusMessage('Analysis failed. Review the backend configuration and try again.')
+    } catch (err) {
+      clearInterval(timer)
+      setAnalysisProgress(0)
+      setErrorMessage(err instanceof Error ? err.message : 'Analysis failed')
+      setStatusMessage('Error.')
     } finally {
-      setIsAnalyzing(false)
+      setTimeout(() => {
+        setIsAnalyzing(false)
+        setAnalysisProgress(0)
+      }, 600)
     }
   }
 
-  async function handleCurrentPdfDownload() {
-    if (!activeAnalysis) {
-      return
-    }
-
+  async function handlePdfDownload() {
+    if (!activeAnalysis) return
     try {
       const blob = await generatePdf(activeAnalysis)
-      downloadBlob(blob, 'neurohire-analysis-report.pdf')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'PDF generation failed'
-      setErrorMessage(message)
+      downloadBlob(blob, 'neurohire-report.pdf')
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'PDF failed')
     }
   }
 
-  async function handleHistoryPdfDownload(id: string) {
+  async function handleHistoryPdf(id: string) {
     try {
       const blob = await generateHistoryPdf(id)
-      downloadBlob(blob, `neurohire-history-${id}.pdf`)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Saved PDF generation failed'
-      setErrorMessage(message)
+      downloadBlob(blob, `neurohire-${id}.pdf`)
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'PDF failed')
     }
   }
 
-  async function handleDeleteHistory(id: string) {
+  async function handleDelete(id: string) {
     try {
       await deleteHistoryEntry(id)
-      if (selectedAnalysis && history.find((entry) => entry.id === id)?.analysis_result === selectedAnalysis) {
+      if (selectedAnalysis && history.find((e) => e.id === id)?.analysis_result === selectedAnalysis) {
         setSelectedAnalysis(null)
       }
       await reloadHistory()
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Delete failed'
-      setErrorMessage(message)
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Delete failed')
     }
+  }
+
+  if (authLoading) {
+    return (
+      <div className="auth-page">
+        <div className="auth-card"><p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Loading...</p></div>
+      </div>
+    )
+  }
+
+  if (isConfigured && !user) {
+    return <AuthPage />
   }
 
   return (
     <div className="app-shell">
-      <div className="background-orb background-orb--left" />
-      <div className="background-orb background-orb--right" />
+      <div className="bg-gradient" />
 
-      <header className="hero-panel">
-        <div className="hero-panel__copy">
-          <span className="eyebrow">NeuroHire command center</span>
-          <h1>Professional resume intelligence with a live ATS dashboard.</h1>
-          <p>
-            Upload a resume, compare it against a role, and review the result through score visuals,
-            keyword gaps, and recruiter-ready feedback.
-          </p>
-          <div className="hero-panel__status-row">
-            <div className={`status-pill ${health?.status === 'healthy' ? 'status-pill--good' : ''}`}>
-              <span className="status-pill__dot" />
-              {health?.status === 'healthy' ? 'Backend connected' : 'Backend pending'}
-            </div>
-            <div className="subtle-metadata">API: {getApiBaseUrl()}</div>
-          </div>
+      {/* ── Header ── */}
+      <header className="header">
+        <div className="header__brand">
+          <div className="header__logo">N</div>
+          <span className="header__title">NeuroHire</span>
         </div>
-
-        <div className="hero-stats">
-          <article>
-            <strong>{Math.round(activeAnalysis?.ats_score ?? 0)}</strong>
-            <span>ATS score</span>
-          </article>
-          <article>
-            <strong>{Math.round(keywordMatch)}%</strong>
-            <span>Keyword match</span>
-          </article>
-          <article>
-            <strong>{Math.round(skillValidationPct)}%</strong>
-            <span>Skill proof rate</span>
-          </article>
-          <article>
-            <strong>{history.length}</strong>
-            <span>Saved analyses</span>
-          </article>
+        <div className="header__right">
+          <div className="header__status">
+            <span className={`header__dot ${health?.status === 'healthy' ? 'header__dot--connected' : ''}`} />
+            <span>{health?.status === 'healthy' ? 'Connected' : 'Offline'}</span>
+          </div>
+          {user && <span className="header__email">{user.email}</span>}
+          {user && (
+            <button type="button" className="btn btn--secondary btn--sm" onClick={() => void signOut()}>
+              Sign Out
+            </button>
+          )}
         </div>
       </header>
 
-      <main className="dashboard-grid">
-        <section className="panel panel--form">
-          <div className="section-heading">
-            <span>Analysis intake</span>
-            <h2>Run a new evaluation</h2>
+      {/* ── Stats Row ── */}
+      <div className="stats-row">
+        <div className="stat-card">
+          <div className="stat-card__value">{Math.round(activeAnalysis?.ats_score ?? 0)}</div>
+          <div className="stat-card__label">ATS Score</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card__value">{Math.round(keywordMatch)}%</div>
+          <div className="stat-card__label">Keyword Match</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card__value">{Math.round(skillValidationPct)}%</div>
+          <div className="stat-card__label">Skill Proof</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card__value">{history.length}</div>
+          <div className="stat-card__label">Analyses</div>
+        </div>
+      </div>
+
+      {/* ── Main Grid ── */}
+      <main className="main-grid">
+        {/* Left: Form */}
+        <section className="panel">
+          <div className="panel__header">
+            <div className="panel__eyebrow">Analyze</div>
+            <h2 className="panel__title">Upload & Evaluate</h2>
           </div>
 
-          <form className="analyzer-form" onSubmit={handleAnalyze}>
-            <label className="field-group field-group--file">
-              <span>Resume file</span>
+          <form className="form" onSubmit={handleAnalyze}>
+            <div className="field">
+              <label className="field__label">Resume</label>
               <input
+                className="field__input"
                 type="file"
                 accept=".pdf,.doc,.docx"
-                onChange={(event) => setResumeFile(event.target.files?.[0] ?? null)}
+                onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
               />
-              <small>{resumeFile ? resumeFile.name : 'PDF, DOC, or DOCX up to 5 MB'}</small>
-            </label>
+              <span className="field__hint">
+                {resumeFile ? resumeFile.name : 'PDF, DOC, or DOCX — up to 5 MB'}
+              </span>
+            </div>
 
-            <label className="field-group">
-              <span>Job description</span>
+            <div className="field">
+              <label className="field__label">Job Description (optional)</label>
               <textarea
+                className="field__textarea"
                 value={jobDescription}
-                onChange={(event) => setJobDescription(event.target.value)}
-                rows={10}
-                placeholder="Paste the target role to unlock keyword gap analysis and semantic matching."
+                onChange={(e) => setJobDescription(e.target.value)}
+                placeholder="Paste a job description for keyword gap analysis..."
               />
-            </label>
+            </div>
 
-            <div className="action-row">
-              <button type="submit" className="button button--primary" disabled={isAnalyzing}>
-                {isAnalyzing ? 'Analyzing...' : 'Analyze resume'}
+            <div className="form__actions">
+              <button type="submit" className="btn btn--primary" disabled={isAnalyzing}>
+                {isAnalyzing ? 'Analyzing...' : 'Analyze'}
               </button>
               <button
                 type="button"
-                className="button button--ghost"
+                className="btn btn--secondary"
                 disabled={!activeAnalysis}
-                onClick={() => void handleCurrentPdfDownload()}
+                onClick={() => void handlePdfDownload()}
               >
-                Export current PDF
+                Export PDF
               </button>
             </div>
           </form>
 
-          <div className="inline-status">
-            <strong>{statusMessage}</strong>
-            {errorMessage ? <p>{errorMessage}</p> : <p>Upload a document to populate the dashboard.</p>}
+          {isAnalyzing && (
+            <div className="progress-pill">
+              <div className="progress-pill__bar">
+                <div
+                  className="progress-pill__fill"
+                  style={{ width: `${analysisProgress}%` }}
+                />
+              </div>
+              <span className="progress-pill__label">{analysisProgress}%</span>
+            </div>
+          )}
+
+          <div className="status-bar">
+            <div className="status-bar__text">{statusMessage}</div>
+            {errorMessage && <div className="status-bar__error">{errorMessage}</div>}
           </div>
         </section>
 
-        <section className="panel panel--history">
-          <div className="section-heading">
-            <span>Saved results</span>
-            <h2>History and score trend</h2>
+        {/* Right: History */}
+        <section className="panel">
+          <div className="panel__header">
+            <div className="panel__eyebrow">History</div>
+            <h2 className="panel__title">Past Analyses</h2>
           </div>
 
           <Sparkline points={historyScores} />
 
           <div className="history-list">
-            {isHistoryLoading ? <p className="empty-state">Loading history...</p> : null}
-            {!isHistoryLoading && history.length === 0 ? (
-              <p className="empty-state">Saved analyses will appear here when Supabase history is configured.</p>
-            ) : null}
+            {isHistoryLoading && <p className="empty-state">Loading...</p>}
+            {!isHistoryLoading && history.length === 0 && (
+              <p className="empty-state">No saved analyses yet.</p>
+            )}
             {history.map((entry) => (
               <article key={entry.id} className="history-item">
                 <button
@@ -288,16 +323,16 @@ function App() {
                   className="history-item__body"
                   onClick={() => setSelectedAnalysis(entry.analysis_result)}
                 >
-                  <strong>{entry.resume_name || entry.filename}</strong>
-                  <span>{formatDate(entry.created_at || entry.date)}</span>
+                  <div className="history-item__name">{entry.resume_name || entry.filename}</div>
+                  <div className="history-item__date">{formatDate(entry.created_at || entry.date)}</div>
                 </button>
-                <div className="history-item__meta">
-                  <span>{Math.round(entry.ats_score)} ATS</span>
-                  <button type="button" onClick={() => void handleHistoryPdfDownload(entry.id)}>
+                <div className="history-item__actions">
+                  <span className="history-item__score">{Math.round(entry.ats_score)}</span>
+                  <button type="button" className="btn btn--secondary btn--sm" onClick={() => void handleHistoryPdf(entry.id)}>
                     PDF
                   </button>
-                  <button type="button" onClick={() => void handleDeleteHistory(entry.id)}>
-                    Delete
+                  <button type="button" className="btn btn--danger btn--sm" onClick={() => void handleDelete(entry.id)}>
+                    ✕
                   </button>
                 </div>
               </article>
@@ -305,143 +340,134 @@ function App() {
           </div>
         </section>
 
-        <section className="panel panel--results panel--wide">
-          <div className="section-heading">
-            <span>Insight board</span>
-            <h2>{activeAnalysis ? 'Resume performance breakdown' : 'Awaiting first analysis'}</h2>
+        {/* Full-width: Results */}
+        <section className="panel panel--full">
+          <div className="panel__header">
+            <div className="panel__eyebrow">Results</div>
+            <h2 className="panel__title">
+              {activeAnalysis ? 'Performance Breakdown' : 'Awaiting Analysis'}
+            </h2>
           </div>
 
           {!activeAnalysis ? (
-            <div className="empty-panel">
-              <p>Run an analysis to unlock score visuals, keyword intelligence, and actionable fixes.</p>
+            <div className="empty-state">
+              Upload a resume and run analysis to see insights here.
             </div>
           ) : (
             <>
-              <div className="results-overview">
-                <ScoreRing
-                  label="ATS Fit"
-                  value={activeAnalysis.ats_score}
-                  helper={activeAnalysis.interpretation || 'Overall resume readiness score.'}
-                />
-                <ScoreRing
-                  label="Keyword Match"
-                  value={keywordMatch}
-                  helper="How closely the resume aligns with target role language."
-                />
-                <ScoreRing
-                  label="Semantic Match"
-                  value={semanticMatch}
-                  helper="Embedding similarity between the resume and the job brief."
-                />
+              {/* Score Rings */}
+              <div className="scores-row">
+                <ScoreRing label="ATS Fit" value={activeAnalysis.ats_score} helper="Overall readiness" />
+                <ScoreRing label="Keywords" value={keywordMatch} helper="Role alignment" />
+                <ScoreRing label="Semantic" value={semanticMatch} helper="Embedding similarity" />
               </div>
 
+              {/* Detail Cards */}
               <div className="results-grid">
-                <BarChart title="Weighted component scoring" items={componentChartData} />
+                {/* Component Bar Chart */}
+                <BarChart title="Component Scores" items={componentChartData} />
 
-                <div className="chart-card">
-                  <div className="section-heading">
-                    <span>Validation</span>
-                    <h3>Skill evidence coverage</h3>
+                {/* Skill Validation */}
+                <div className="results-card">
+                  <div className="results-card__eyebrow">Validation</div>
+                  <div className="results-card__title">Skill Evidence</div>
+                  <div className="validation-headline">
+                    <span className="validation-headline__value">{Math.round(skillValidationPct)}%</span>
+                    <span className="validation-headline__label">validated</span>
                   </div>
-                  <div className="validation-card">
-                    <div className="validation-card__headline">
-                      <strong>{Math.round(skillValidationPct)}%</strong>
-                      <span>validated against projects or experience</span>
-                    </div>
-                    <div className="keyword-columns">
-                      <div>
-                        <h4>Validated</h4>
-                        <div className="chip-cloud chip-cloud--positive">
-                          {activeAnalysis.skill_validation_details?.validated.length ? (
-                            activeAnalysis.skill_validation_details.validated.map((item: SkillValidationItem) => (
-                              <span key={item.skill}>{item.skill}</span>
-                            ))
-                          ) : (
-                            <span>No validated skills yet</span>
-                          )}
-                        </div>
+                  <div className="keyword-grid">
+                    <div>
+                      <div className="keyword-group__title">Validated</div>
+                      <div className="chip-cloud">
+                        {activeAnalysis.skill_validation_details?.validated.length ? (
+                          activeAnalysis.skill_validation_details.validated.map((item: SkillValidationItem) => (
+                            <span key={item.skill} className="chip chip--success">{item.skill}</span>
+                          ))
+                        ) : (
+                          <span className="chip chip--success">None yet</span>
+                        )}
                       </div>
-                      <div>
-                        <h4>Needs proof</h4>
-                        <div className="chip-cloud chip-cloud--negative">
-                          {activeAnalysis.skill_validation_details?.unvalidated.length ? (
-                            activeAnalysis.skill_validation_details.unvalidated.map((skill: string) => (
-                              <span key={skill}>{skill}</span>
-                            ))
-                          ) : (
-                            <span>No missing proof</span>
-                          )}
-                        </div>
+                    </div>
+                    <div>
+                      <div className="keyword-group__title">Needs Proof</div>
+                      <div className="chip-cloud">
+                        {activeAnalysis.skill_validation_details?.unvalidated.length ? (
+                          activeAnalysis.skill_validation_details.unvalidated.map((skill: string) => (
+                            <span key={skill} className="chip chip--danger">{skill}</span>
+                          ))
+                        ) : (
+                          <span className="chip chip--danger">None</span>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="chart-card">
-                  <div className="section-heading">
-                    <span>Keyword intelligence</span>
-                    <h3>Matched versus missing terms</h3>
-                  </div>
-                  <div className="keyword-columns">
+                {/* Keyword Intelligence */}
+                <div className="results-card">
+                  <div className="results-card__eyebrow">Keywords</div>
+                  <div className="results-card__title">Matched vs Missing</div>
+                  <div className="keyword-grid">
                     <div>
-                      <h4>Matched</h4>
-                      <div className="chip-cloud chip-cloud--positive">
+                      <div className="keyword-group__title">Matched</div>
+                      <div className="chip-cloud">
                         {activeAnalysis.matched_keywords.length ? (
-                          activeAnalysis.matched_keywords.map((keyword: string) => <span key={keyword}>{keyword}</span>)
+                          activeAnalysis.matched_keywords.map((kw: string) => (
+                            <span key={kw} className="chip chip--success">{kw}</span>
+                          ))
                         ) : (
-                          <span>Add a job description to compare keywords</span>
+                          <span className="chip chip--success">Paste a JD to compare</span>
                         )}
                       </div>
                     </div>
                     <div>
-                      <h4>Missing</h4>
-                      <div className="chip-cloud chip-cloud--negative">
+                      <div className="keyword-group__title">Missing</div>
+                      <div className="chip-cloud">
                         {activeAnalysis.missing_keywords.length ? (
-                          activeAnalysis.missing_keywords.map((keyword: string) => <span key={keyword}>{keyword}</span>)
+                          activeAnalysis.missing_keywords.map((kw: string) => (
+                            <span key={kw} className="chip chip--danger">{kw}</span>
+                          ))
                         ) : (
-                          <span>No missing keywords detected</span>
+                          <span className="chip chip--danger">None</span>
                         )}
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="chart-card chart-card--span-2">
-                  <div className="section-heading">
-                    <span>Actionable feedback</span>
-                    <h3>Priority fixes and recruiter-facing guidance</h3>
-                  </div>
+                {/* Feedback */}
+                <div className="results-card results-card--full">
+                  <div className="results-card__eyebrow">Feedback</div>
+                  <div className="results-card__title">Priority Fixes</div>
 
-                  <div className="summary-strip">
-                    {activeAnalysis.issues_summary.slice(0, 4).map((issue: string) => (
-                      <div key={issue} className="summary-strip__item">
-                        {issue}
-                      </div>
-                    ))}
-                  </div>
+                  {activeAnalysis.issues_summary.length > 0 && (
+                    <div className="issue-strip">
+                      {activeAnalysis.issues_summary.slice(0, 4).map((issue: string) => (
+                        <div key={issue} className="issue-strip__item">{issue}</div>
+                      ))}
+                    </div>
+                  )}
 
-                  <div className="feedback-list">
+                  <div className="feedback-grid">
                     {activeAnalysis.detailed_feedback.slice(0, 6).map((item: IssueDetail) => (
                       <article key={`${item.issue_title}-${item.where_it_appears}`} className="feedback-card">
-                        <div className="feedback-card__header">
-                          <span>{item.severity_level}</span>
-                          <strong>{item.issue_title}</strong>
+                        <div className="feedback-card__severity">{item.severity_level}</div>
+                        <div className="feedback-card__title">{item.issue_title}</div>
+                        <p className="feedback-card__desc">{item.explanation}</p>
+                        <div className="feedback-card__meta">
+                          <div className="feedback-card__meta-row">
+                            <span className="feedback-card__meta-label">Impact</span>
+                            <span className="feedback-card__meta-value">{item.ats_impact}</span>
+                          </div>
+                          <div className="feedback-card__meta-row">
+                            <span className="feedback-card__meta-label">Where</span>
+                            <span className="feedback-card__meta-value">{item.where_it_appears}</span>
+                          </div>
+                          <div className="feedback-card__meta-row">
+                            <span className="feedback-card__meta-label">Fix</span>
+                            <span className="feedback-card__meta-value">{item.how_to_fix}</span>
+                          </div>
                         </div>
-                        <p>{item.explanation}</p>
-                        <dl>
-                          <div>
-                            <dt>Impact</dt>
-                            <dd>{item.ats_impact}</dd>
-                          </div>
-                          <div>
-                            <dt>Where</dt>
-                            <dd>{item.where_it_appears}</dd>
-                          </div>
-                          <div>
-                            <dt>Fix</dt>
-                            <dd>{item.how_to_fix}</dd>
-                          </div>
-                        </dl>
                       </article>
                     ))}
                   </div>

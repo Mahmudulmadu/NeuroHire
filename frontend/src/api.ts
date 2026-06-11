@@ -1,35 +1,43 @@
 import type { AnalysisResponse, HealthResponse, HistoryEntry } from './types'
+import { supabase, supabaseConfigured } from './supabaseClient'
 
 const DEFAULT_API_BASE_URL = 'http://127.0.0.1:8000'
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, '')
-const USER_ID = import.meta.env.VITE_DEMO_USER_ID ?? 'local-demo-user'
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (!supabaseConfigured) {
+    return { 'x-user-id': '00000000-0000-0000-0000-000000000000' }
+  }
+  const { data: { session } } = await supabase.auth.getSession()
+  if (session?.access_token) {
+    return { Authorization: `Bearer ${session.access_token}` }
+  }
+  return {}
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const authHeaders = await getAuthHeaders()
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
-      'x-user-id': USER_ID,
+      ...authHeaders,
       ...(init?.headers ?? {}),
     },
   })
 
   if (!response.ok) {
     let detail = response.statusText
-
     try {
       const body = (await response.json()) as { detail?: string }
       detail = body.detail ?? detail
     } catch {
       detail = response.statusText
     }
-
     throw new Error(detail || 'Request failed')
   }
 
-  if (response.status === 204) {
-    return undefined as T
-  }
-
+  if (response.status === 204) return undefined as T
   return (await response.json()) as T
 }
 
@@ -57,38 +65,28 @@ export async function analyzeResume(file: File, jobDescription: string): Promise
 }
 
 export async function deleteHistoryEntry(id: string): Promise<void> {
-  await request<void>(`/api/v1/history/${id}`, {
-    method: 'DELETE',
-  })
+  await request<void>(`/api/v1/history/${id}`, { method: 'DELETE' })
 }
 
 export async function generatePdf(analysis: AnalysisResponse): Promise<Blob> {
+  const authHeaders = await getAuthHeaders()
   const response = await fetch(`${API_BASE_URL}/api/v1/generate-pdf`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-id': USER_ID,
+      ...authHeaders,
     },
     body: JSON.stringify(analysis),
   })
-
-  if (!response.ok) {
-    throw new Error('Unable to generate PDF report')
-  }
-
+  if (!response.ok) throw new Error('Unable to generate PDF report')
   return response.blob()
 }
 
 export async function generateHistoryPdf(id: string): Promise<Blob> {
+  const authHeaders = await getAuthHeaders()
   const response = await fetch(`${API_BASE_URL}/api/v1/history/${id}/pdf`, {
-    headers: {
-      'x-user-id': USER_ID,
-    },
+    headers: { ...authHeaders },
   })
-
-  if (!response.ok) {
-    throw new Error('Unable to generate saved PDF report')
-  }
-
+  if (!response.ok) throw new Error('Unable to generate saved PDF report')
   return response.blob()
 }
