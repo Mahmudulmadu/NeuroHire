@@ -2,6 +2,10 @@
 
 NeuroHire is a resume analysis application that combines a FastAPI backend, a React + TypeScript frontend, a fine-tuned sentence-transformer model, and Groq-powered structured parsing to evaluate resumes against ATS-style criteria.
 
+## Demo
+
+▶️ **[Watch the project demo video](https://drive.google.com/file/d/12lHCBAp8ORzbJ8iI_250QC9kNpREZRE1/view?usp=sharing)** — a full walkthrough of resume upload, ATS scoring, job-description matching, and PDF export.
+
 The application supports:
 
 - Resume upload for PDF, DOCX, and legacy DOC detection
@@ -115,14 +119,37 @@ VITE_API_BASE_URL=http://127.0.0.1:8000
 5. The scoring engine produces ATS component scores and feedback.
 6. Results can be saved to history and exported as PDF.
 
-## Current Model Usage
+## Fine-Tuned Model (Custom ML Work)
 
-NeuroHire uses the fine-tuned local model in `backend/ML_Model_fine_tune_BERT` by default for:
+The semantic engine behind NeuroHire is **not an off-the-shelf model** — it is a BERT-based
+sentence-transformer that I **fine-tuned from scratch on ~6,000 curated raw data samples** of
+resume and job-description pairs to specialize it for the recruitment / ATS domain.
+
+📓 **[Training notebook (Google Colab)](https://colab.research.google.com/drive/1qW1csovNlFNYxMGZrsxanAQYUiP9GN8b?usp=sharing)** — end-to-end data preparation, fine-tuning, and evaluation.
+
+**What the fine-tuning delivers**
+
+- **Domain adaptation** — the base sentence-transformer is re-trained so embeddings capture
+  resume/JD semantics (skills, responsibilities, seniority) far better than a generic model.
+- **Sharper semantic similarity** — more accurate resume-to-job-description matching than the
+  `all-MiniLM-L6-v2` baseline it falls back to.
+- **Evidence-based skill validation** — reliable skill-to-project and skill-to-experience
+  grounding, so a claimed skill is only credited when the resume actually demonstrates it.
+
+**ML skills demonstrated**
+
+- Building a 6,000-sample training corpus (collection, cleaning, and pairing of raw data)
+- Fine-tuning transformer embeddings with Sentence Transformers
+- Evaluating embedding quality and integrating the trained model into a production FastAPI service
+
+At runtime, NeuroHire loads this fine-tuned model from `backend/ML_Model_fine_tune_BERT` during
+FastAPI startup, stores it on `app.state.embedder`, and uses it for:
 
 - Semantic similarity between resume and job description
 - Skill-to-project and skill-to-experience validation
 
-This model is loaded during FastAPI startup and stored on `app.state.embedder`.
+If the fine-tuned model directory is absent, the service gracefully falls back to the
+`all-MiniLM-L6-v2` baseline.
 
 ## Build Commands
 
